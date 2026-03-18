@@ -58,6 +58,37 @@ class MultiRobotSkill:
 
         logger.info("MultiRobotSkill 初始化完成")
 
+    def register_adapter(self, adapter: RobotAdapter, auto_connect: bool = True) -> bool:
+        """
+        注册一个已实例化的适配器（供 Agent 动态生成适配器后注入）
+
+        Args:
+            adapter: 已实例化的 RobotAdapter 子类对象
+            auto_connect: 是否自动调用 connect()
+
+        Returns:
+            bool: 注册是否成功
+
+        示例:
+            >>> class MyAdapter(RobotAdapter): ...
+            >>> skill.register_adapter(MyAdapter("my_robot", "http://..."))
+        """
+        try:
+            if auto_connect and not adapter.connect():
+                logger.error(f"无法连接到机器人: {adapter.name}")
+                return False
+
+            self.robots[adapter.name] = adapter
+            self.coordinator.register_robot(adapter)
+            self.state_manager.register_robot(adapter)
+
+            logger.info(f"成功注册适配器: {adapter.name} ({adapter.robot_type.value})")
+            return True
+
+        except Exception as e:
+            logger.error(f"注册适配器失败: {adapter.name}, 错误: {e}")
+            return False
+
     def register_robot(
         self,
         name: str,
@@ -66,7 +97,7 @@ class MultiRobotSkill:
         **config
     ) -> bool:
         """
-        注册机器人
+        注册机器人（内置类型快捷方式）
 
         Args:
             name: 机器人名称（唯一标识）
@@ -76,34 +107,18 @@ class MultiRobotSkill:
 
         Returns:
             bool: 注册是否成功
-
-        示例:
-            >>> skill.register_robot("vansbot", "http://192.168.3.113:5000")
-            >>> skill.register_robot("dog1", "http://localhost:8000", robot_type="puppypi", robot_id=1)
         """
         try:
-            # 根据类型创建适配器
             if robot_type == "vansbot" or (robot_type == "auto" and "vansbot" in name.lower()):
                 adapter = VansbotAdapter(name, endpoint, **config)
             elif robot_type == "puppypi" or (robot_type == "auto" and "dog" in name.lower()):
                 robot_id = config.get("robot_id", 1)
                 adapter = PuppyPiAdapter(name, endpoint, robot_id, **config)
             else:
-                logger.error(f"未知的机器人类型: {robot_type}")
+                logger.error(f"未知的机器人类型: {robot_type}，请使用 register_adapter() 注入自定义适配器")
                 return False
 
-            # 连接机器人
-            if not adapter.connect():
-                logger.error(f"无法连接到机器人: {name}")
-                return False
-
-            # 注册到各个组件
-            self.robots[name] = adapter
-            self.coordinator.register_robot(adapter)
-            self.state_manager.register_robot(adapter)
-
-            logger.info(f"成功注册机器人: {name} ({adapter.robot_type.value})")
-            return True
+            return self.register_adapter(adapter)
 
         except Exception as e:
             logger.error(f"注册机器人失败: {name}, 错误: {e}")

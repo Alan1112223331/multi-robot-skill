@@ -307,21 +307,13 @@ error_handling:
 
 本 Skill 可以轻松集成到 OpenClaw 框架中，实现通过即时通讯（微信、WhatsApp 等）控制机器人。
 
+OpenClaw 加载后会自动读取 `SKILL.md`，Claude 就知道如何操作这个 Skill，包括：
+- 读取用户提供的机器人 API 文档，自动生成适配器
+- 编排多机器人协同任务
+- 实时反馈执行进度
+
 详细集成指南请参考：[OPENCLAW_INTEGRATION.md](OPENCLAW_INTEGRATION.md)
-
-快速示例：
-```python
-# 作为 OpenClaw Skill 使用
-from multi_robot_skill import MultiRobotSkill
-
-skill = MultiRobotSkill()
-skill.register_robot("vansbot", "http://192.168.3.113:5000")
-
-# OpenClaw Agent 可以调用 Skill 来控制机器人
-plan = skill.create_plan("用户任务")
-# ... 添加任务
-results = skill.execute_plan(plan)
-```
+**OpenClaw Agent 操作手册：[SKILL.md](SKILL.md)**
 
 ### 其他 AI Agent 框架
 

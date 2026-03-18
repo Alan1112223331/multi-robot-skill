@@ -6,222 +6,130 @@
 
 OpenClaw 是基于 Anthropic Claude 的 AI Agent 框架，支持通过即时通讯（微信、WhatsApp 等）控制各种系统。
 
+## 🎯 核心能力
+
+Multi-Robot Skill 为 OpenClaw 提供：
+
+1. **动态适配新机器人** - AI Agent 读取机器人 API 文档，自己生成适配器代码
+2. **多机器人协同** - 并行/串行任务编排，依赖关系管理
+3. **实时反馈控制** - 基于机器人状态反馈动态调整任务
+4. **错误恢复** - 自动重试、回滚、跳过等策略
+
+**关键特性：** OpenClaw 的 Claude 实例不需要预先知道机器人型号，只需要能读懂 HTTP API 文档，就能自己生成适配器并控制机器人。
+
 ## 🔗 集成方式
 
-### 方式 1: 作为 OpenClaw Skill 使用
+### 方式 1: 作为 OpenClaw Skill 使用（推荐）
 
-将本项目打包为 OpenClaw Skill，让 OpenClaw Agent 可以直接调用。
+将本项目作为 OpenClaw Skill 安装，OpenClaw 会自动加载 `SKILL.md` 到 Claude 的 system prompt。
 
-#### 步骤 1: 创建 Skill 元数据
+#### 步骤 1: 确认 Skill 元数据
 
-在项目根目录创建 `skill.json`:
+项目根目录已有 `_meta.json`（OpenClaw 标准格式）：
 
 ```json
 {
-  "name": "multi-robot-coordination",
+  "name": "multi-robot",
   "version": "1.0.0",
-  "description": "多机器人协同控制技能",
-  "author": "Your Name",
+  "description": "多机器人协同控制 Skill，让 AI Agent 具备感知反馈、动态适配、并行调度多种机器人的能力。",
+  "author": "LooperRobotics",
   "main": "skill.py",
-  "dependencies": {
-    "python": ">=3.8",
-    "packages": ["requests>=2.28.0"]
-  },
-  "capabilities": [
-    "robot_control",
-    "multi_agent_coordination",
-    "task_planning"
-  ]
+  "openclaw": {
+    "emoji": "🤖",
+    "requires": {
+      "python": ">=3.8",
+      "pip": ["requests>=2.28.0"]
+    }
+  }
 }
 ```
 
-#### 步骤 2: 创建 OpenClaw 包装器
-
-创建 `openclaw_wrapper.py`:
-
-```python
-"""
-OpenClaw Skill 包装器
-"""
-
-from multi_robot_skill import MultiRobotSkill
-
-# 全局 Skill 实例
-_skill = None
-
-def initialize(config: dict) -> dict:
-    """
-    初始化 Skill
-
-    OpenClaw 会在加载 Skill 时调用此函数
-    """
-    global _skill
-    _skill = MultiRobotSkill(
-        max_workers=config.get("max_workers", 4),
-        log_level=config.get("log_level", "INFO")
-    )
-
-    # 注册机器人
-    robots = config.get("robots", [])
-    for robot in robots:
-        _skill.register_robot(
-            name=robot["name"],
-            endpoint=robot["endpoint"],
-            robot_type=robot.get("type", "auto"),
-            **robot.get("config", {})
-        )
-
-    return {
-        "status": "initialized",
-        "robots": _skill.list_robots()
-    }
-
-def execute(command: str, params: dict = None) -> dict:
-    """
-    执行命令
-
-    OpenClaw 会调用此函数来执行用户命令
-    """
-    global _skill
-    if not _skill:
-        return {"error": "Skill not initialized"}
-
-    params = params or {}
-
-    # 根据命令类型执行不同操作
-    if command == "create_plan":
-        plan = _skill.create_plan(
-            name=params.get("name", "任务"),
-            description=params.get("description", "")
-        )
-        return {"plan_id": plan.id}
-
-    elif command == "add_task":
-        plan_id = params.get("plan_id")
-        plan = _skill.planner.get_plan(plan_id)
-        if not plan:
-            return {"error": "Plan not found"}
-
-        task = _skill.create_task(
-            robot=params["robot"],
-            action=params["action"],
-            params=params.get("params", {}),
-            **params.get("task_config", {})
-        )
-        plan.add_task(task)
-        return {"task_id": task.id}
-
-    elif command == "execute_plan":
-        plan_id = params.get("plan_id")
-        plan = _skill.planner.get_plan(plan_id)
-        if not plan:
-            return {"error": "Plan not found"}
-
-        results = _skill.execute_plan(plan)
-        return {
-            "success": all(r.success for r in results),
-            "results": [r.to_dict() for r in results]
-        }
-
-    elif command == "get_status":
-        return _skill.get_status()
-
-    else:
-        return {"error": f"Unknown command: {command}"}
-
-def shutdown():
-    """
-    关闭 Skill
-
-    OpenClaw 会在卸载 Skill 时调用此函数
-    """
-    global _skill
-    if _skill:
-        _skill.shutdown()
-        _skill = None
-```
-
-#### 步骤 3: 配置文件
-
-创建 `openclaw_config.yaml`:
-
-```yaml
-skill:
-  name: multi-robot-coordination
-  enabled: true
-
-  config:
-    max_workers: 4
-    log_level: INFO
-
-    robots:
-      - name: vansbot
-        endpoint: http://192.168.3.113:5000
-        type: vansbot
-
-      - name: dog1
-        endpoint: http://localhost:8000
-        type: puppypi
-        config:
-          robot_id: 1
-
-      - name: dog2
-        endpoint: http://localhost:8000
-        type: puppypi
-        config:
-          robot_id: 2
-```
-
-#### 步骤 4: 安装到 OpenClaw
+#### 步骤 2: 安装到 OpenClaw
 
 ```bash
-# 方法 1: 通过 ClawHub 安装（如果已发布）
-npx skills add multi-robot-coordination
+# 本地安装（将整个目录复制到 OpenClaw skills 目录）
+cp -r multi_robot_skill ~/.openclaw/skills/multi-robot
 
-# 方法 2: 本地安装
-cp -r multi_robot_skill ~/.openclaw/skills/multi-robot-coordination
+# 或通过 ClawHub 安装（如果已发布）
+npx skills add multi-robot
 ```
 
-### 方式 2: 直接在 OpenClaw Agent 中使用
+OpenClaw 加载 Skill 后会自动读取 `SKILL.md`，将其注入 Claude 的 system prompt，Claude 就知道如何操作这个 Skill 了。
+
+#### 步骤 3: 给 Claude 提供机器人文档
+
+安装完成后，直接在对话中把机器人的 API 文档发给 OpenClaw：
+
+```
+用户：我有一个机械臂，API 文档如下：
+  GET /health → {"status": "ok"}
+  POST /robot/grab → {"status": "ok"}
+  POST /robot/release → {"status": "ok"}
+  ...
+
+请帮我控制它抓取物体。
+```
+
+Claude 会自动生成适配器、注册机器人、编排任务并执行。
+
+### 方式 2: 直接在 Python 中使用
 
 如果你的 OpenClaw Agent 是用 Python 编写的，可以直接导入使用：
 
 ```python
 from multi_robot_skill import MultiRobotSkill
+from multi_robot_skill.adapters.base import (
+    RobotAdapter, RobotCapability, RobotState, ActionResult, ActionStatus, RobotType
+)
+import requests
 
-class MyOpenClawAgent:
-    def __init__(self):
-        self.robot_skill = MultiRobotSkill()
+# 1. 根据机器人文档生成适配器
+class MyRobotAdapter(RobotAdapter):
+    def __init__(self, name, endpoint, **config):
+        super().__init__(name, endpoint, **config)
+        self.robot_type = RobotType.WHEELED
+        self._capabilities = [
+            RobotCapability("move", "移动", {"x": "float", "y": "float"}),
+            RobotCapability("stop", "停止", {}),
+        ]
 
-        # 注册机器人
-        self.robot_skill.register_robot("vansbot", "http://192.168.3.113:5000")
-        self.robot_skill.register_robot("dog1", "http://localhost:8000", robot_type="puppypi", robot_id=1)
+    def connect(self):
+        try:
+            resp = requests.get(f"{self.endpoint}/health", timeout=5)
+            self._state.connected = resp.status_code == 200
+            return self._state.connected
+        except Exception:
+            return False
 
-    def handle_user_command(self, command: str):
-        """处理用户命令"""
-        # 使用 LLM 理解命令并生成任务计划
-        plan = self.parse_command_to_plan(command)
+    def disconnect(self):
+        self._state.connected = False
+        return True
 
-        # 执行计划
-        results = self.robot_skill.execute_plan(plan)
+    def get_state(self):
+        return self._state
 
-        return results
+    def get_capabilities(self):
+        return self._capabilities
 
-    def parse_command_to_plan(self, command: str):
-        """使用 LLM 将自然语言命令转换为任务计划"""
-        # 这里可以调用 Claude API 来理解命令
-        # 然后创建相应的任务计划
+    def execute_action(self, action, params=None):
+        params = params or {}
+        try:
+            resp = requests.post(f"{self.endpoint}/api/{action}", json=params, timeout=30)
+            data = resp.json()
+            if data.get("success"):
+                return ActionResult(ActionStatus.SUCCESS, "完成", data=data)
+            return ActionResult(ActionStatus.FAILED, data.get("message", "失败"))
+        except Exception as e:
+            return ActionResult(ActionStatus.FAILED, str(e), error=e)
 
-        plan = self.robot_skill.create_plan("用户任务")
+# 2. 注册并使用
+skill = MultiRobotSkill()
+skill.register_adapter(MyRobotAdapter("my_robot", "http://192.168.1.100:8080"))
 
-        # 示例：如果命令是"让机械臂抓取物体"
-        if "抓取" in command:
-            detect = self.robot_skill.create_task("vansbot", "detect_objects")
-            grab = self.robot_skill.create_task("vansbot", "grab", depends_on=[detect.id])
-            plan.add_task(detect)
-            plan.add_task(grab)
-
-        return plan
+# 3. 编排任务
+plan = skill.create_plan("测试任务")
+plan.add_task(skill.create_task("my_robot", "move", {"x": 1.0, "y": 0.0}))
+results = skill.execute_plan(plan)
 ```
 
 ## 🎯 使用示例
@@ -235,76 +143,34 @@ class MyOpenClawAgent:
 
 OpenClaw Agent 处理流程：
 1. 接收用户消息
-2. 使用 Claude 理解任务意图
-3. 调用 Multi-Robot Skill 创建任务计划
-4. 执行任务计划
+2. Claude 读取 SKILL.md，理解任务意图和可用 API
+3. 调用 Multi-Robot Skill 创建任务计划（含依赖关系）
+4. 执行任务计划，实时获取反馈
 5. 返回执行结果给用户
 
-### 代码示例
+### 接入新机器人的完整流程
 
-```python
-# OpenClaw Agent 代码
-from openclaw import Agent
-from multi_robot_skill import MultiRobotSkill
-
-class RobotCoordinationAgent(Agent):
-    def __init__(self):
-        super().__init__()
-        self.skill = MultiRobotSkill()
-        self.setup_robots()
-
-    def setup_robots(self):
-        """设置机器人"""
-        self.skill.register_robot("vansbot", "http://192.168.3.113:5000")
-        self.skill.register_robot("dog1", "http://localhost:8000", robot_type="puppypi", robot_id=1)
-
-    async def on_message(self, message: str, platform: str):
-        """处理用户消息"""
-        # 使用 Claude 理解任务
-        task_plan = await self.understand_task(message)
-
-        # 执行任务
-        results = self.skill.execute_plan(task_plan)
-
-        # 返回结果
-        if all(r.success for r in results):
-            await self.reply("✅ 任务完成！")
-        else:
-            await self.reply("❌ 任务执行失败，请检查机器人状态")
-
-    async def understand_task(self, message: str):
-        """使用 Claude 理解任务并生成计划"""
-        # 调用 Claude API
-        response = await self.claude.complete(
-            prompt=f"""
-            用户说：{message}
-
-            请分析这个任务，并生成机器人任务计划。
-            可用的机器人：
-            - vansbot (机械臂): detect_objects, grab, release, move_to_place
-            - dog1 (机器狗): move_to_zone, load, unload
-
-            请返回 JSON 格式的任务计划。
-            """
-        )
-
-        # 解析 Claude 的响应并创建任务计划
-        plan = self.skill.create_plan("用户任务")
-        # ... 根据 Claude 的响应添加任务
-
-        return plan
-
-# 启动 Agent
-agent = RobotCoordinationAgent()
-agent.run()
 ```
+用户：我有一个新的轮式机器人，API 如下：
+  GET  /health
+  POST /move  {"x": float, "y": float, "speed": float}
+  POST /stop
+  GET  /status → {"battery": int, "position": {"x": float, "y": float}}
+
+帮我让它移动到坐标 (2.0, 3.0)
+```
+
+Claude 会：
+1. 生成 `WheelRobotAdapter` 类（继承 `RobotAdapter`）
+2. 调用 `skill.register_adapter()` 注册
+3. 创建 `move` 任务并执行
+4. 返回执行结果
 
 ## 🔧 高级配置
 
-### 自定义事件处理
+### 事件回调（实时进度推送）
 
 ```python
-# 在 OpenClaw Agent 中监听事件
 skill.on_event("task_started", lambda e:
     openclaw.send_message(f"🔄 开始执行: {e['task_name']}")
 )
@@ -314,38 +180,27 @@ skill.on_event("task_completed", lambda e:
 )
 
 skill.on_event("task_failed", lambda e:
-    openclaw.send_message(f"❌ 失败: {e['error']}")
+    openclaw.send_message(f"❌ 失败: {e['task_name']} - {e.get('error', '')}")
 )
 ```
 
-### 错误处理
+### 错误处理策略
 
 ```python
-# 配置错误处理策略
 skill.configure_error_handling({
     "max_retries": 3,
     "retry_delay": 1.0,
-    "default_strategy": "retry"
+    "timeout": 60.0,
+    "default_strategy": "retry"  # retry / skip / abort / rollback / continue
 })
-
-# 注册错误回调
-def on_error(error_info):
-    openclaw.send_message(f"⚠️ 错误: {error_info['error']}")
-    openclaw.send_message("正在重试...")
-
-skill.error_handler.config.on_error_callback = on_error
 ```
 
 ## 📚 参考资源
 
-- [Multi-Robot Skill 文档](README.md)
-- [OpenClaw 官方文档](https://github.com/openclaw/openclaw)
-- [使用指南](USAGE_GUIDE.md)
-- [示例代码](examples/)
-
-## 🤝 贡献
-
-欢迎为 OpenClaw 集成贡献代码和文档！
+- [SKILL.md](SKILL.md) - **OpenClaw Agent 操作手册（最重要）**
+- [USAGE_GUIDE.md](USAGE_GUIDE.md) - 详细 API 使用指南
+- [ADAPTER_FIXES.md](ADAPTER_FIXES.md) - 内置适配器 API 对照说明
+- [examples/](examples/) - 示例代码
 
 ## 📄 许可证
 

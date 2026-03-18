@@ -1,0 +1,14 @@
+{
+  "name": "multi-robot",
+  "version": "1.0.0",
+  "description": "多机器人协同控制 Skill，让 AI Agent 具备感知反馈、动态适配、并行调度多种机器人的能力。",
+  "author": "LooperRobotics",
+  "main": "skill.py",
+  "openclaw": {
+    "emoji": "🤖",
+    "requires": {
+      "python": ">=3.8",
+      "pip": ["requests>=2.28.0"]
+    }
+  }
+}

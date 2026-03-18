@@ -8,7 +8,14 @@ __version__ = "1.0.0"
 __author__ = "Claude Code"
 
 from .skill import MultiRobotSkill
-from .adapters.base import RobotAdapter, RobotCapability, ActionResult
+from .adapters.base import (
+    RobotAdapter,
+    RobotCapability,
+    ActionResult,
+    RobotType,
+    ActionStatus,
+    RobotState
+)
 from .core.task_planner import TaskPlanner, Task, TaskPlan
 from .core.coordinator import Coordinator
 from .core.state_manager import StateManager
@@ -18,6 +25,9 @@ __all__ = [
     "RobotAdapter",
     "RobotCapability",
     "ActionResult",
+    "RobotType",
+    "ActionStatus",
+    "RobotState",
     "TaskPlanner",
     "Task",
     "TaskPlan",
