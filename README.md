@@ -1,6 +1,6 @@
 # Multi-Robot Coordination Skill
 
-一个通用的多机器人协同控制技能包，适用于各种 AI Agent 框架（Claude Code、OpenClaw 等）。
+一个可用于任意机器人的多机器人协同控制技能包，适用于各种 AI Agent 框架（OpenClaw、Claude Code 等）。
 
 ## 🎯 设计目标
 
@@ -29,16 +29,16 @@
                    │
         ┌──────────┼──────────┐
         ▼          ▼          ▼
-   ┌────────┐ ┌────────┐ ┌────────┐
-   │Vansbot │ │PuppyPi │ │PuppyPi │
-   │Adapter │ │Adapter │ │Adapter │
-   └────┬───┘ └────┬───┘ └────┬───┘
-        │          │          │
-        ▼          ▼          ▼
-   ┌────────┐ ┌────────┐ ┌────────┐
-   │机械臂   │ │机器狗1  │ │机器狗2  │
-   │HTTP API│ │HTTP API│ │HTTP API│
-   └────────┘ └────────┘ └────────┘
+   ┌────────┐ ┌────────┐ ┌────────────┐
+   │Vansbot │ │PuppyPi │ │  任意机器人 │
+   │Adapter │ │Adapter │ │  (AI生成)  │
+   └────┬───┘ └────┬───┘ └─────┬──────┘
+        │          │           │
+        ▼          ▼           ▼
+   ┌────────┐ ┌────────┐ ┌────────────┐
+   │机械臂   │ │机器狗  │ │  任意设备   │
+   │HTTP API│ │HTTP API│ │  任意协议   │
+   └────────┘ └────────┘ └────────────┘
 ```
 
 ## ✨ 核心特性
@@ -65,9 +65,16 @@
 
 ## 🚀 快速开始
 
-### 安装
+> **最简单的方式：** 直接告诉你的 AI Agent（如 OpenClaw）：
+>
+> *"帮我安装这个 skill：https://github.com/Alan1112223331/multi-robot-skill.git，然后我给你机器人的技术文档，你来接入它。"*
+>
+> Agent 会自动 clone、安装依赖、读取 `SKILL.md`，并根据你提供的机器人 API 文档生成适配器。
+
+### 手动安装
 
 ```bash
+git clone https://github.com/Alan1112223331/multi-robot-skill.git
 cd multi_robot_skill
 pip install -r requirements.txt
 ```
