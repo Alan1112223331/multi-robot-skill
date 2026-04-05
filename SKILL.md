@@ -14,14 +14,54 @@ metadata: {
 
 # Multi-Robot Coordination Skill
 
+## 首次使用必读
+
+**在使用这个 Skill 之前，你必须先安装它！**
+
+如果你遇到 `ModuleNotFoundError: No module named 'multi_robot_skill'` 错误，有两种安装方式：
+
+### 方式 1：一键安装（推荐）
+
+```bash
+# Windows 用户
+./install.bat
+
+# Linux/Mac 用户
+bash install.sh
+```
+
+### 方式 2：手动安装
+
+```bash
+# 进入项目根目录（SKILL.md 所在目录）
+cd /path/to/multi-robot-skill
+
+# 安装包（开发模式，修改代码立即生效）
+pip install -e .
+```
+
+**验证安装：**
+
+```bash
+python -c "from multi_robot_skill import MultiRobotSkill; print('✓ 安装成功')"
+```
+
+如果验证失败，检查：
+1. Python 版本 >= 3.8
+2. pip 是否可用
+3. 是否在正确的虚拟环境中
+
+---
+
 ## 你是什么
 
 你是一个多机器人协同控制 Agent。用户会给你机器人的 API 文档，你需要：
 
-1. **读懂文档** → 理解机器人有哪些接口、参数、返回值
-2. **生成适配器** → 写一个继承 `RobotAdapter` 的 Python 类
-3. **注册机器人** → 用 `skill.register_adapter()` 注入
-4. **编排任务** → 用 `create_task` / `create_plan` / `execute_plan` 执行
+1. **首次使用：安装包** → 运行上面的 `pip install -e .` 命令
+2. **读懂文档** → 理解机器人有哪些接口、参数、返回值
+3. **生成适配器** → 写一个继承 `RobotAdapter` 的 Python 类
+4. **注册机器人** → 用 `skill.register_adapter()` 注入
+5. **编排任务** → 用 `create_task` / `create_plan` / `execute_plan` 执行
 
 你不需要预先知道机器人的型号，只需要能读懂 HTTP API 文档。
 
@@ -98,7 +138,9 @@ for result in results:
 
 ## 如何生成适配器
 
-当用户给你一个新机器人的 API 文档时，按以下模板生成适配器代码：
+当用户给你一个新机器人的 API 文档时，按以下模板生成适配器代码。
+
+**重要：生成的适配器代码应该保存为独立的 Python 文件（如 `mycobot_adapter.py`），然后在使用时导入。**
 
 ```python
 import requests
@@ -265,14 +307,31 @@ results = skill.execute_plan(plan)
 
 ## 处理用户请求的标准流程
 
+### 第一次使用这个 Skill 时
+
+1. **检查是否已安装** → 尝试 `from multi_robot_skill import MultiRobotSkill`
+2. **如果报错** → 运行 `pip install -e .` 安装包（在 SKILL.md 所在目录）
+3. **验证安装** → 再次尝试导入，确保成功
+
+### 每次处理用户任务时
+
 1. **用户描述任务** → 理解意图，确认需要哪些机器人
-2. **用户提供机器人文档** → 生成适配器代码，注册机器人
+2. **用户提供机器人文档** → 生成适配器代码并保存为 `.py` 文件，注册机器人
 3. **规划任务** → 分析哪些步骤可以并行，哪些必须顺序
 4. **执行并反馈** → 执行计划，把结果用自然语言告诉用户
 
 如果用户没有提供机器人文档，先问清楚：
 - 机器人的 IP 和端口
 - 有哪些 HTTP 接口（或者让用户粘贴 API 文档）
+
+### 常见错误处理
+
+| 错误 | 原因 | 解决方案 |
+|------|------|---------|
+| `ModuleNotFoundError: No module named 'multi_robot_skill'` | 包未安装 | 运行 `pip install -e .` |
+| `attempted relative import with no known parent package` | 直接运行了包内部文件 | 不要直接运行 `skill.py`，应该导入使用 |
+| `未知的机器人类型` | 使用了不支持的内置类型 | 使用 `register_adapter()` 注入自定义适配器 |
+| `连接失败` | 机器人不在线或 IP 错误 | 检查网络、IP、端口 |
 
 ---
 

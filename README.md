@@ -65,7 +65,7 @@
 
 ## 🚀 快速开始
 
-> **最简单的方式：** 直接告诉你的 AI Agent（如 OpenClaw）：
+> **最简单的方式：** 直接告诉你的 AI Agent（如 OpenClaw、Claude Code）：
 >
 > *"帮我安装这个 skill：https://github.com/Alan1112223331/multi-robot-skill.git，然后我给你机器人的技术文档，你来接入它。"*
 >
@@ -73,11 +73,34 @@
 
 ### 手动安装
 
+**方法 1: 一键安装（推荐）**
+
 ```bash
 git clone https://github.com/Alan1112223331/multi-robot-skill.git
-cd multi_robot_skill
-pip install -r requirements.txt
+cd multi-robot-skill
+
+# Windows 用户
+install.bat
+
+# Linux/Mac 用户
+bash install.sh
 ```
+
+**方法 2: 开发模式安装**
+
+```bash
+git clone https://github.com/Alan1112223331/multi-robot-skill.git
+cd multi-robot-skill
+pip install -e .
+```
+
+**方法 3: 直接从 GitHub 安装**
+
+```bash
+pip install git+https://github.com/Alan1112223331/multi-robot-skill.git
+```
+
+> **遇到导入错误？** 查看 [INSTALL.md](INSTALL.md) 获取详细的安装指南和问题排查。
 
 ### 基础使用
 
