@@ -5,7 +5,13 @@ Multi-Robot Skill 主接口
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional, Callable
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from .core.task_planner import TaskPlanner, Task, TaskPlan, TaskType
 from .core.coordinator import Coordinator, ExecutionResult
@@ -18,6 +24,8 @@ from .adapters.puppypi_adapter import PuppyPiAdapter
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+
 
 class MultiRobotSkill:
     """
@@ -27,36 +35,61 @@ class MultiRobotSkill:
     适用于各种 AI Agent 框架（Claude Code、OpenClaw 等）。
 
     示例:
-        >>> skill = MultiRobotSkill()
-        >>> skill.register_robot("vansbot", "http://192.168.3.113:5000")
-        >>> skill.register_robot("dog1", "http://localhost:8000", robot_id=1)
-        >>> result = skill.execute_task("让机械臂抓取0号物体")
+        >>> skill = MultiRobotSkill()  # 自动从 config.yaml 加载已配置的机器人
+        >>> result = skill.quick_execute("vansbot", "detect_objects")
     """
 
-    def __init__(self, max_workers: int = 4, log_level: str = "INFO"):
+    def __init__(self, max_workers: int = 4, log_level: str = "INFO", config_path: str = None):
         """
-        初始化 Skill
+        初始化 Skill，自动从 config.yaml 加载机器人配置。
 
         Args:
             max_workers: 最大并行工作线程数
             log_level: 日志级别
+            config_path: 配置文件路径，默认使用 skill 目录下的 config.yaml
         """
-        # 设置日志
         logging.basicConfig(
             level=getattr(logging, log_level),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
 
-        # 初始化核心组件
         self.planner = TaskPlanner()
         self.coordinator = Coordinator(max_workers=max_workers)
         self.state_manager = StateManager()
         self.error_handler = ErrorHandler()
-
-        # 机器人注册表
         self.robots: Dict[str, RobotAdapter] = {}
 
+        # 自动从 config.yaml 加载机器人
+        self._load_config(config_path or _DEFAULT_CONFIG_PATH)
+
         logger.info("MultiRobotSkill 初始化完成")
+
+    def _load_config(self, config_path: str):
+        """从 config.yaml 自动注册机器人"""
+        if yaml is None:
+            logger.warning("PyYAML 未安装，跳过 config.yaml 加载。运行 pip install pyyaml 以启用。")
+            return
+        if not os.path.exists(config_path):
+            logger.info(f"未找到配置文件: {config_path}，跳过自动注册")
+            return
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+            type_map = {"manipulator": "vansbot", "quadruped": "puppypi"}
+            for name, cfg in config.get("robots", {}).items():
+                endpoint = cfg.get("endpoint")
+                if not endpoint:
+                    logger.warning(f"机器人 {name} 缺少 endpoint，跳过")
+                    continue
+                robot_type = type_map.get(cfg.get("type", ""), cfg.get("type", "auto"))
+                extra = {k: v for k, v in cfg.items() if k not in ("type", "endpoint")}
+                ok = self.register_robot(name, endpoint, robot_type=robot_type, **extra)
+                if ok:
+                    logger.info(f"从配置自动注册: {name} ({cfg.get('type')}) @ {endpoint}")
+                else:
+                    logger.warning(f"自动注册失败（机器人可能离线）: {name} @ {endpoint}")
+        except Exception as e:
+            logger.error(f"加载配置文件失败: {e}")
 
     def register_adapter(self, adapter: RobotAdapter, auto_connect: bool = True) -> bool:
         """
@@ -304,6 +337,36 @@ class MultiRobotSkill:
     def stop_monitoring(self):
         """停止状态监控"""
         self.state_manager.stop_monitoring()
+
+    def quick_execute(
+        self,
+        robot: str,
+        action: str,
+        params: Optional[Dict[str, Any]] = None
+    ) -> ExecutionResult:
+        """
+        一步执行单个机器人动作（无需手动创建 plan/task）。
+
+        Args:
+            robot: 机器人名称（必须已在 config.yaml 中配置或已手动注册）
+            action: 动作名称
+            params: 动作参数（可选）
+
+        Returns:
+            ExecutionResult: 执行结果
+
+        示例:
+            >>> skill = MultiRobotSkill()
+            >>> result = skill.quick_execute("vansbot", "detect_objects")
+            >>> result = skill.quick_execute("dog1", "move_to_zone", {"target_zone": "loading"})
+        """
+        plan = self.create_plan(f"{robot}.{action}")
+        task = self.create_task(robot, action, params)
+        plan.add_task(task)
+        results = self.execute_plan(plan)
+        return results[0] if results else ExecutionResult(
+            task_id="", task_name=f"{robot}.{action}", success=False, message="无执行结果"
+        )
 
     def shutdown(self):
         """关闭 Skill"""
