@@ -12,7 +12,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="multi_robot_skill",
-    version="2.1.0",
+    version="2.2.0",
     author="Claude Code",
     description="Multi-Robot Coordination Skill for AI Agents",
     long_description=long_description,
