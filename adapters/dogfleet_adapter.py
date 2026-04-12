@@ -72,7 +72,7 @@ class DogFleetAdapter(RobotAdapter):
             RobotCapability(
                 "wait_until_idle",
                 "等待机械狗完成当前任务（阻塞）",
-                {"dog_id": "int (可选)", "timeout": "int (可选，秒，默认60)"}
+                {"dog_id": "int (可选)", "timeout": "int (可选，秒，默认120)", "poll_interval": "float (可选，秒，默认1.0)"}
             ),
         ]
 
@@ -202,7 +202,7 @@ class DogFleetAdapter(RobotAdapter):
                 return ActionResult(ActionStatus.FAILED, "获取目标点失败")
 
             elif action == "wait_until_idle":
-                timeout_sec = params.get("timeout", 60)
+                timeout_sec = params.get("timeout", 120)  # 默认120秒
                 poll_interval = params.get("poll_interval", 1.0)  # 默认1秒轮询一次
                 start_time = time.time()
                 last_state = None
