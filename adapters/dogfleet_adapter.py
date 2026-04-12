@@ -203,15 +203,29 @@ class DogFleetAdapter(RobotAdapter):
 
             elif action == "wait_until_idle":
                 timeout_sec = params.get("timeout", 60)
+                poll_interval = params.get("poll_interval", 1.0)  # 默认1秒轮询一次
                 start_time = time.time()
+                last_state = None
                 while time.time() - start_time < timeout_sec:
-                    status_resp = requests.get(f"{self.endpoint}/api/status", timeout=self.timeout)
-                    status_data = status_resp.json()
-                    dog_state = status_data.get("dogs", {}).get(str(dog_id), {}).get("state")
-                    if dog_state == "idle":
-                        return ActionResult(ActionStatus.SUCCESS, f"机械狗 {dog_id} 已完成任务")
-                    time.sleep(0.5)
-                return ActionResult(ActionStatus.TIMEOUT, f"等待超时（{timeout_sec}秒）")
+                    try:
+                        status_resp = requests.get(f"{self.endpoint}/api/status", timeout=self.timeout)
+                        status_data = status_resp.json()
+                        dog_state = status_data.get("dogs", {}).get(str(dog_id), {}).get("state")
+                        
+                        # 记录状态变化用于调试
+                        if dog_state != last_state:
+                            last_state = dog_state
+                        
+                        if dog_state == "idle":
+                            return ActionResult(ActionStatus.SUCCESS, f"机械狗 {dog_id} 已完成任务", data={"final_state": dog_state})
+                    except Exception as e:
+                        # 网络错误不应该导致整个等待失败，继续重试
+                        pass
+                    
+                    time.sleep(poll_interval)
+                
+                # 超时时返回最后的状态信息
+                return ActionResult(ActionStatus.TIMEOUT, f"等待超时（{timeout_sec}秒），最后状态: {last_state}")
 
             else:
                 return ActionResult(ActionStatus.FAILED, f"未知动作: {action}")
