@@ -1,47 +1,35 @@
-# Multi-Robot Skill 配置文件
+# 机械臂 + 机械狗群协同配置
 
-# 机器人配置
 robots:
-  vansbot:
-    type: manipulator
-    endpoint: http://192.168.3.113:5000
-    timeout: 60
-    description: "MyCobot 机械臂"
+  # MyCobot 机械臂
+  mycobot_arm:
+    type: custom
+    adapter_class: adapters.mycobot_adapter.MyCobotAdapter
+    endpoint: http://192.168.50.120:5000
+    config:
+      timeout: 30
 
-  dog1:
-    type: quadruped
+  # 机械狗群 - 0号狗
+  dog_0:
+    type: custom
+    adapter_class: adapters.dogfleet_adapter.DogFleetAdapter
     endpoint: http://localhost:8000
-    robot_id: 1
-    timeout: 60
-    description: "PuppyPi 机器狗 #1"
+    config:
+      timeout: 10
+      dog_id: 0
 
-  dog2:
-    type: quadruped
+  # 机械狗群 - 1号狗（可选）
+  dog_1:
+    type: custom
+    adapter_class: adapters.dogfleet_adapter.DogFleetAdapter
     endpoint: http://localhost:8000
-    robot_id: 2
-    timeout: 60
-    description: "PuppyPi 机器狗 #2"
-
-# 协调器配置
-coordination:
-  max_workers: 4
-  max_parallel_tasks: 4
-  task_timeout: 60
-  enable_collision_detection: false
+    config:
+      timeout: 10
+      dog_id: 1
 
 # 错误处理配置
 error_handling:
   max_retries: 3
   retry_delay: 1.0
   timeout: 60.0
-  default_strategy: retry  # retry, skip, abort, rollback, continue
-
-# 日志配置
-logging:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-# 状态监控配置
-monitoring:
-  enabled: true
-  interval: 1.0  # 秒
+  default_strategy: retry  # retry / skip / abort / rollback / continue

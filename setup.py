@@ -18,7 +18,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Alan1112223331/multi-robot-skill",
-    packages=find_packages(),
+    packages=find_packages() + ['multi_robot_skill'],
+    package_dir={'multi_robot_skill': '.'},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

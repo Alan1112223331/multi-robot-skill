@@ -16,7 +16,18 @@ metadata: {
 
 ## 首次使用必读
 
-**在使用这个 Skill 之前，你必须先安装它！**
+**⚠️ 重要：第一次使用前必须重命名目录！**
+
+如果你的 skill 目录名是 `multi-robot`（带连字符），必须先重命名为 `multi_robot_skill`（下划线）：
+
+```bash
+# 在 skills 目录下执行
+mv multi-robot multi_robot_skill
+# 或 Windows PowerShell
+Rename-Item multi-robot multi_robot_skill
+```
+
+**然后安装 Skill：**
 
 如果你遇到 `ModuleNotFoundError: No module named 'multi_robot_skill'` 错误，有两种安装方式：
 
@@ -34,7 +45,7 @@ bash install.sh
 
 ```bash
 # 进入项目根目录（SKILL.md 所在目录）
-cd /path/to/multi-robot-skill
+cd /path/to/multi_robot_skill
 
 # 安装包（开发模式，修改代码立即生效）
 pip install -e .
