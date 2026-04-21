@@ -356,6 +356,252 @@ results = skill.execute_plan(plan)
 - **新适配器必须持久化**。生成的适配器代码必须保存为 `adapters/<robot_name>_adapter.py`，并在 `config.yaml` 中登记，不能只存在于内存或临时脚本中。
 - **优先用 `quick_execute`**。单步动作直接用 `skill.quick_execute(robot, action, params)`，不需要手动创建 plan/task。只有多步骤编排才用 `create_plan` / `create_task`。
 
+---
+
+## 智能体中途判断：分段执行 Plan
+
+**核心原则：** `execute_plan()` 一旦开始就会自动执行完所有任务，**不会中途暂停让你判断**。如果需要根据执行结果动态决策，必须**分段执行 plan**。
+
+### 何时需要分段？
+
+在以下情况下，必须把 plan 切分成多个阶段：
+
+1. **需要检查结果再决定下一步**
+   - 检测到物体了吗？检测到几个？
+   - 抓取成功了吗？
+   - 机器人到位了吗？
+
+2. **需要根据结果选择不同的动作**
+   - 检测到3个物体，抓哪个？
+   - 抓取失败了，要重试还是放弃？
+   - 电量低于20%，要充电还是继续？
+
+3. **需要动态计算参数**
+   - 根据检测结果计算物体编号
+   - 根据距离计算移动速度
+   - 根据物体大小调整抓取力度
+
+### 切分原则
+
+**✅ 应该切分的地方：**
+- 在"需要看结果才能决定下一步"的地方切分
+- 在"有 if/else 分支"的地方切分
+- 在"需要循环重试"的地方切分
+
+**❌ 不应该切分的地方：**
+- 确定性的连续动作（如：移动→拍照→回来）
+- 并行任务的内部（如：两个机器人同时移动）
+- 不需要判断的顺序流程
+
+### 示例1：智能抓取黄色方块
+
+**错误做法（无法判断）：**
+```python
+# ❌ 一次性执行，无法根据检测结果选择目标
+plan = skill.create_plan("抓取")
+task1 = skill.create_task("arm", "capture")
+task2 = skill.create_task("arm", "move_to_object", {"object_no": 2}, depends_on=[task1.id])  # 硬编码物体2
+task3 = skill.create_task("arm", "grab", depends_on=[task2.id])
+plan.add_task(task1)
+plan.add_task(task2)
+plan.add_task(task3)
+results = skill.execute_plan(plan)  # 如果物体2不存在，任务会失败
+```
+
+**正确做法（分段判断）：**
+```python
+# ✅ 阶段1：检测物体
+plan1 = skill.create_plan("检测阶段")
+task1 = skill.create_task("arm", "capture", {"include_image": False})
+plan1.add_task(task1)
+results1 = skill.execute_plan(plan1)
+
+# ← 在这里切分！智能体判断检测结果
+if not results1[0].success:
+    print("检测失败，任务中止")
+    return
+
+detections = results1[0].data['detections']
+if len(detections) == 0:
+    print("未检测到物体，任务结束")
+    return
+
+# 智能选择目标：选择面积最小的物体（可能是黄色方块）
+target = min(detections, key=lambda x: x['area'])['index']
+print(f"选择物体{target}作为目标")
+
+# ✅ 阶段2：抓取目标物体
+plan2 = skill.create_plan("抓取阶段")
+task2 = skill.create_task("arm", "move_to_object", {"object_no": target})
+task3 = skill.create_task("arm", "grab", depends_on=[task2.id])
+plan2.add_task(task2)
+plan2.add_task(task3)
+results2 = skill.execute_plan(plan2)
+
+# ← 再次切分！检查抓取是否成功
+if results2[-1].success:
+    print("抓取成功")
+else:
+    print(f"抓取失败: {results2[-1].message}")
+```
+
+### 示例2：多机器人协同（需要同步判断）
+
+```python
+# ✅ 阶段1：双方各自准备（可以并行）
+plan1 = skill.create_plan("准备阶段")
+
+# 机械臂准备
+arm_task1 = skill.create_task("arm", "capture")
+arm_task2 = skill.create_task("arm", "move_to_object", {"object_no": 0}, depends_on=[arm_task1.id])
+arm_task3 = skill.create_task("arm", "grab", depends_on=[arm_task2.id])
+
+# 机器狗准备
+dog_task1 = skill.create_task("dog1", "move_to_zone", {"target_zone": "loading"})
+dog_task2 = skill.create_task("dog1", "load", depends_on=[dog_task1.id])
+
+plan1.add_task(arm_task1)
+plan1.add_task(arm_task2)
+plan1.add_task(arm_task3)
+plan1.add_task(dog_task1)
+plan1.add_task(dog_task2)
+
+results1 = skill.execute_plan(plan1)
+
+# ← 在这里切分！智能体判断双方是否都准备好
+arm_ready = results1[2].success  # 机械臂抓取成功？
+dog_ready = results1[4].success  # 机器狗就位成功？
+
+if not arm_ready:
+    print("机械臂抓取失败，任务中止")
+    return
+
+if not dog_ready:
+    print("机器狗未就位，让机械臂放回物体")
+    # 执行回退操作
+    rollback_plan = skill.create_plan("回退")
+    rollback_task = skill.create_task("arm", "release")
+    rollback_plan.add_task(rollback_task)
+    skill.execute_plan(rollback_plan)
+    return
+
+# ✅ 阶段2：交接（双方都准备好了才执行）
+plan2 = skill.create_plan("交接阶段")
+task5 = skill.create_task("arm", "move_to_place", {"place_name": "dog_basket"})
+task6 = skill.create_task("arm", "release", depends_on=[task5.id])
+plan2.add_task(task5)
+plan2.add_task(task6)
+results2 = skill.execute_plan(plan2)
+
+# ← 再次切分！判断交接是否成功
+if results2[-1].success:
+    # ✅ 阶段3：机器狗运输
+    plan3 = skill.create_plan("运输阶段")
+    task7 = skill.create_task("dog1", "move_to_zone", {"target_zone": "unloading"})
+    task8 = skill.create_task("dog1", "unload", depends_on=[task7.id])
+    plan3.add_task(task7)
+    plan3.add_task(task8)
+    skill.execute_plan(plan3)
+    print("任务完成")
+else:
+    print(f"交接失败: {results2[-1].message}")
+```
+
+### 示例3：带重试逻辑的抓取
+
+```python
+max_retries = 3
+for attempt in range(max_retries):
+    print(f"尝试第 {attempt + 1} 次抓取")
+    
+    # 阶段1：检测
+    plan1 = skill.create_plan("检测")
+    task1 = skill.create_task("arm", "capture")
+    plan1.add_task(task1)
+    results1 = skill.execute_plan(plan1)
+    
+    # ← 切分点：判断是否检测到物体
+    if not results1[0].success or len(results1[0].data['detections']) == 0:
+        print("未检测到物体，重试...")
+        continue
+    
+    target = results1[0].data['detections'][0]['index']
+    
+    # 阶段2：抓取
+    plan2 = skill.create_plan("抓取")
+    task2 = skill.create_task("arm", "move_to_object", {"object_no": target})
+    task3 = skill.create_task("arm", "grab", depends_on=[task2.id])
+    plan2.add_task(task2)
+    plan2.add_task(task3)
+    results2 = skill.execute_plan(plan2)
+    
+    # ← 切分点：判断是否抓取成功
+    if results2[-1].success:
+        print("抓取成功！")
+        break
+    else:
+        print(f"抓取失败: {results2[-1].message}，重试...")
+else:
+    print(f"尝试 {max_retries} 次后仍然失败，任务中止")
+```
+
+### 实用技巧
+
+**技巧1：用注释标记切分点**
+```python
+# ========== 阶段1：检测 ==========
+plan1 = ...
+results1 = skill.execute_plan(plan1)
+
+# ========== 切分点：选择目标 ==========
+target = 选择逻辑(results1)
+
+# ========== 阶段2：抓取 ==========
+plan2 = ...
+results2 = skill.execute_plan(plan2)
+```
+
+**技巧2：封装判断逻辑**
+```python
+def select_target(detections):
+    """智能选择目标物体"""
+    if len(detections) == 0:
+        return None
+    # 选择面积最小的
+    return min(detections, key=lambda x: x['area'])['index']
+
+def check_all_success(results):
+    """检查所有任务是否成功"""
+    return all(r.success for r in results)
+
+# 使用
+results1 = skill.execute_plan(plan1)
+target = select_target(results1[-1].data['detections'])  # ← 切分点
+if target is None:
+    return
+
+results2 = skill.execute_plan(plan2)
+if not check_all_success(results2):  # ← 切分点
+    handle_failure()
+```
+
+**技巧3：画流程图找切分点**
+```
+[检测] → (判断：有物体吗？) → [移动] → (判断：到位了吗？) → [抓取] → (判断：成功了吗？) → [完成]
+   ↓                              ↓                              ↓
+ [结束]                         [重试]                         [放弃]
+```
+每个 `(判断)` 就是一个切分点。
+
+### 总结
+
+- **Plan 执行是自动化的**，一旦开始就不会暂停
+- **需要判断时必须分段**，在 `execute_plan()` 之间插入判断逻辑
+- **切分原则**：在"需要看结果才能决定下一步"的地方切分
+- **不要过度切分**：确定性流程不需要切分
+
+---
+
 ### 常见错误处理
 
 | 错误 | 原因 | 解决方案 |

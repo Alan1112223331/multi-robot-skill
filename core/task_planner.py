@@ -5,7 +5,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Callable
 from enum import Enum
 import uuid
 
@@ -33,6 +33,8 @@ class Task:
     timeout: float = 60.0
     retry_count: int = 0
     max_retries: int = 3
+    condition_fn: Optional[Callable] = None  # 条件判断函数（用于 CONDITIONAL 类型）
+    metadata: Dict[str, Any] = field(default_factory=dict)  # 额外元数据
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -78,43 +80,33 @@ class TaskPlan:
         """
         # 构建依赖图
         task_map = {task.id: task for task in self.tasks}
-        in_degree = {task.id: len(task.depends_on) for task in self.tasks}
-
+        
         # 找出所有没有依赖的任务
         ready_tasks = [task for task in self.tasks if not task.depends_on]
 
         execution_order = []
+        completed_ids = set()
 
         while ready_tasks:
             # 当前批次可以并行执行
             execution_order.append(ready_tasks[:])
 
-            # 处理完成的任务
-            completed_ids = {task.id for task in ready_tasks}
-            ready_tasks = []
-
+            # 标记这批任务为已完成
+            for task in ready_tasks:
+                completed_ids.add(task.id)
+            
             # 找出下一批可以执行的任务
+            next_ready = []
             for task in self.tasks:
+                # 跳过已完成的任务
                 if task.id in completed_ids:
                     continue
-
-                # 检查依赖是否都已完成
-                if all(dep_id in completed_ids or dep_id in [t.id for batch in execution_order for t in batch]
-                       for dep_id in task.depends_on):
-                    # 检查是否所有依赖都在已完成的批次中
-                    all_deps_completed = True
-                    for dep_id in task.depends_on:
-                        found = False
-                        for batch in execution_order:
-                            if any(t.id == dep_id for t in batch):
-                                found = True
-                                break
-                        if not found:
-                            all_deps_completed = False
-                            break
-
-                    if all_deps_completed and task.id not in [t.id for t in ready_tasks]:
-                        ready_tasks.append(task)
+                
+                # 检查所有依赖是否都已完成
+                if all(dep_id in completed_ids for dep_id in task.depends_on):
+                    next_ready.append(task)
+            
+            ready_tasks = next_ready
 
         return execution_order
 

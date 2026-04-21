@@ -81,13 +81,36 @@ class MultiRobotSkill:
                 if not endpoint:
                     logger.warning(f"机器人 {name} 缺少 endpoint，跳过")
                     continue
-                robot_type = type_map.get(cfg.get("type", ""), cfg.get("type", "auto"))
-                extra = {k: v for k, v in cfg.items() if k not in ("type", "endpoint")}
-                ok = self.register_robot(name, endpoint, robot_type=robot_type, **extra)
-                if ok:
-                    logger.info(f"从配置自动注册: {name} ({cfg.get('type')}) @ {endpoint}")
+                
+                # 支持自定义适配器
+                if cfg.get("type") == "custom" and cfg.get("adapter_class"):
+                    try:
+                        # 动态导入适配器类
+                        module_path, class_name = cfg["adapter_class"].rsplit(".", 1)
+                        module = __import__(module_path, fromlist=[class_name])
+                        adapter_class = getattr(module, class_name)
+                        
+                        # 实例化适配器
+                        extra_config = cfg.get("config", {})
+                        adapter = adapter_class(name, endpoint, **extra_config)
+                        
+                        # 注册适配器
+                        ok = self.register_adapter(adapter)
+                        if ok:
+                            logger.info(f"从配置自动注册自定义适配器: {name} ({class_name}) @ {endpoint}")
+                        else:
+                            logger.warning(f"自动注册失败（机器人可能离线）: {name} @ {endpoint}")
+                    except Exception as e:
+                        logger.error(f"加载自定义适配器失败: {name}, 错误: {e}")
                 else:
-                    logger.warning(f"自动注册失败（机器人可能离线）: {name} @ {endpoint}")
+                    # 内置类型
+                    robot_type = type_map.get(cfg.get("type", ""), cfg.get("type", "auto"))
+                    extra = {k: v for k, v in cfg.items() if k not in ("type", "endpoint")}
+                    ok = self.register_robot(name, endpoint, robot_type=robot_type, **extra)
+                    if ok:
+                        logger.info(f"从配置自动注册: {name} ({cfg.get('type')}) @ {endpoint}")
+                    else:
+                        logger.warning(f"自动注册失败（机器人可能离线）: {name} @ {endpoint}")
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")
 
