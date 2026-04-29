@@ -1,0 +1,18 @@
+{
+  "description": "简单的点头和移动测试",
+  "mode": "sequential",
+  "tasks": [
+    {
+      "robot": "mycobot_arm",
+      "action": "head_nod",
+      "params": {}
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "move_to_place",
+      "params": {
+        "place_name": "capture"
+      }
+    }
+  ]
+}

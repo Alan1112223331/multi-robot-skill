@@ -78,7 +78,131 @@ python -c "from multi_robot_skill import MultiRobotSkill; print('✓ 安装成�
 
 ---
 
-## Skill API 速查
+## 快速开始：使用 CLI 工具
+
+**推荐方式：使用 CLI 工具，无需写 Python 代码！**
+
+### 1. 查询可用机器人
+
+```bash
+python cli.py list
+```
+
+输出示例：
+```
+找到 1 个机器人:
+
+机器人名称       | 类型          | 端点                         | 连接
+-----------------------------------------------------------
+mycobot_arm | manipulator | http://192.168.50.120:5000 | ✓
+```
+
+### 2. 查看机器人能力
+
+```bash
+python cli.py capabilities mycobot_arm
+```
+
+这会列出该机器人的所有可用动作、参数说明和使用示例。
+
+**💡 提示：** 也可以查看自动生成的 `CAPABILITIES.md` 文档，包含所有机器人的完整能力列表。
+
+### 3. 执行单个动作
+
+```bash
+# 无参数动作
+python cli.py execute mycobot_arm head_nod
+
+# 带参数动作
+python cli.py execute mycobot_arm move_to_place place_name=capture
+python cli.py execute mycobot_arm capture move_to_capture=true
+
+# 多个参数
+python cli.py execute mycobot_arm move_to_object object_no=0 speed=50
+```
+
+### 4. 执行复杂任务（JSON 配置）
+
+创建 JSON 任务配置文件：
+
+```json
+{
+  "description": "完整的物体抓取流程",
+  "mode": "sequential",
+  "tasks": [
+    {
+      "robot": "mycobot_arm",
+      "action": "capture",
+      "params": {"move_to_capture": true}
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "move_to_object",
+      "params": {"object_no": 0},
+      "depends_on": ["task_0"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "grab",
+      "params": {},
+      "depends_on": ["task_1"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "move_to_place",
+      "params": {"place_name": "drop"},
+      "depends_on": ["task_2"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "release",
+      "params": {},
+      "depends_on": ["task_3"]
+    }
+  ]
+}
+```
+
+执行任务：
+
+```bash
+python cli.py run grab_object.json
+```
+
+**特性：**
+- ✅ 自动处理任务依赖关系（`depends_on`）
+- ✅ 智能拓扑排序，无依赖的任务自动并行执行
+- ✅ 详细的执行报告（成功/失败/耗时）
+- ✅ 支持 `--json` 参数输出 JSON 格式
+
+**示例文件：** 查看 `examples/` 目录下的示例配置。
+
+### 5. 生成能力文档
+
+```bash
+python generate_capabilities.py
+```
+
+这会自动生成 `CAPABILITIES.md`，包含所有已配置机器人的能力列表和 CLI 使用示例。
+
+---
+
+## 工作流程建议
+
+**对于 AI Agent：**
+
+1. **首次使用前**：运行 `python cli.py list` 查看可用机器人
+2. **执行任务前**：运行 `python cli.py capabilities <robot_name>` 查看可用动作
+3. **简单任务**：直接用 `python cli.py execute` 执行
+4. **复杂任务**：创建 JSON 配置文件，用 `python cli.py run` 执行
+
+**不要假设机器人有某个动作，始终先查询能力！**
+
+---
+
+## Skill API 速查（Python 编程方式）
+
+如果你需要更复杂的逻辑（条件判断、循环、动态决策），可以使用 Python API：
 
 ```python
 from multi_robot_skill import MultiRobotSkill
@@ -610,6 +734,70 @@ if not check_all_success(results2):  # ← 切分点
 | `attempted relative import with no known parent package` | 直接运行了包内部文件 | 不要直接运行 `skill.py`，应该导入使用 |
 | `未知的机器人类型` | 使用了不支持的内置类型 | 使用 `register_adapter()` 注入自定义适配器 |
 | `连接失败` | 机器人不在线或 IP 错误 | 检查网络、IP、端口 |
+
+---
+
+## 最佳实践
+
+### 1. 优先使用 CLI 工具
+
+**对于简单任务，优先使用 CLI 工具，无需写 Python 代码：**
+
+```bash
+# ✅ 推荐：使用 CLI
+python cli.py execute mycobot_arm head_nod
+
+# ❌ 不推荐：写脚本
+# test_head_nod.py:
+# from multi_robot_skill import MultiRobotSkill
+# skill = MultiRobotSkill()
+# result = skill.quick_execute('mycobot_arm', 'head_nod', {})
+# print(result.success)
+```
+
+**对于复杂任务，使用 JSON 配置：**
+
+```bash
+# ✅ 推荐：JSON 配置 + CLI
+python cli.py run grab_object.json
+
+# ❌ 不推荐：写完整的 Python 脚本
+```
+
+**只有在需要复杂逻辑时才写 Python 代码：**
+- 条件判断（根据检测结果选择目标）
+- 循环重试（失败后重试）
+- 动态参数计算（根据结果计算下一步参数）
+
+### 2. 始终先查询能力
+
+**不要假设机器人有某个动作！**
+
+```bash
+# ✅ 正确：先查询
+python cli.py capabilities mycobot_arm
+# 看到有 head_nod 动作，再执行
+python cli.py execute mycobot_arm head_nod
+
+# ❌ 错误：直接假设
+python cli.py execute mycobot_arm shake_head  # 可能不存在
+```
+
+### 3. 使用自动生成的文档
+
+```bash
+# 生成最新的能力文档
+python generate_capabilities.py
+
+# 查看 CAPABILITIES.md
+# 包含所有机器人的能力列表和 CLI 示例
+```
+
+### 4. 禁止绕过 Skill API 直接调用
+
+- **禁止直接用 `requests` 调用 HTTP 接口**，所有调用必须通过 `MultiRobotSkill`。
+- **生成的适配器代码应保存为 `adapters/<robot_name>_adapter.py`**，并在 `config.yaml` 中登记，而不是只存在于临时脚本中。
+- **优先使用 `quick_execute`**：简单任务直接用 `skill.quick_execute(robot, action, params)`，不需要手动创建 plan/task。只有多步编排才用 `create_plan` / `create_task`。
 
 ---
 

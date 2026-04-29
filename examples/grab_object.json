@@ -1,0 +1,41 @@
+{
+  "description": "完整的物体抓取流程",
+  "mode": "sequential",
+  "tasks": [
+    {
+      "robot": "mycobot_arm",
+      "action": "capture",
+      "params": {
+        "move_to_capture": true
+      }
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "move_to_object",
+      "params": {
+        "object_no": 0
+      },
+      "depends_on": ["task_0"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "grab",
+      "params": {},
+      "depends_on": ["task_1"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "move_to_place",
+      "params": {
+        "place_name": "drop"
+      },
+      "depends_on": ["task_2"]
+    },
+    {
+      "robot": "mycobot_arm",
+      "action": "release",
+      "params": {},
+      "depends_on": ["task_3"]
+    }
+  ]
+}
